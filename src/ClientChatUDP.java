@@ -9,21 +9,20 @@ public class ClientChatUDP {
         try {
             Scanner scanner = new Scanner(System.in);
 
-            // Demande à l'utilisateur de saisir son pseudo
             System.out.print("Veuillez saisir votre pseudo : ");
             String pseudo = scanner.nextLine();
 
             DatagramSocket socket = new DatagramSocket();
             InetAddress adresseServeur = InetAddress.getByName("localhost");
 
-            // Envoie JOIN: <pseudo> au serveur sur le port principal 9000
+            // Envoi du message initial de connexion au port principal (9000)
             String messageRejoindre = "JOIN:" + pseudo;
             byte[] donneesRejoindre = messageRejoindre.getBytes();
             DatagramPacket paquetRejoindre = new DatagramPacket(
                     donneesRejoindre, donneesRejoindre.length, adresseServeur, 9000);
             socket.send(paquetRejoindre);
 
-            // Attend la réponse PORT : <n> du serveur et retient le port dédié
+            // Réception du port spécifique attribué par le serveur pour la session
             byte[] buffer = new byte[1024];
             DatagramPacket paquetPort = new DatagramPacket(buffer, buffer.length);
             socket.receive(paquetPort);
@@ -31,13 +30,12 @@ public class ClientChatUDP {
 
             int portServeurDedie = 9000;
             if (reponsePort.startsWith("PORT:")) {
-                // On extrait le numéro du port de la chaîne de caractères
                 portServeurDedie = Integer.parseInt(reponsePort.substring(5).trim());
             }
 
             final int portFinal = portServeurDedie;
 
-            // Démarre un thread d'écoute qui reçoit et affiche en continu les messages entrants
+            // Thread secondaire pour écouter les messages entrants sans bloquer la saisie utilisateur
             Thread threadEcoute = new Thread(() -> {
                 try {
                     byte[] bufferEcoute = new byte[1024];
@@ -45,10 +43,15 @@ public class ClientChatUDP {
                         DatagramPacket paquetRecu = new DatagramPacket(bufferEcoute, bufferEcoute.length);
                         socket.receive(paquetRecu);
                         String messageRecu = new String(paquetRecu.getData(), 0, paquetRecu.getLength()).trim();
-                        System.out.println(messageRecu);
+
+                        if (messageRecu.equals("TIMEOUT")) {
+                            System.out.println("Déconnecté par le serveur pour inactivité.");
+                            System.exit(0);
+                        } else {
+                            System.out.println(messageRecu);
+                        }
                     }
                 } catch (Exception e) {
-                    // Si la socket n'est pas fermée intentionnellement, on affiche l'erreur
                     if (!socket.isClosed()) {
                         e.printStackTrace();
                     }
@@ -56,12 +59,11 @@ public class ClientChatUDP {
             });
             threadEcoute.start();
 
-            // Lit en boucle les messages saisis au clavier et les envoie au serveur
+            // Boucle principale pour l'envoi des messages au port dédié
             while (true) {
                 String saisie = scanner.nextLine();
 
                 if (saisie.equalsIgnoreCase("exit")) {
-                    // Envoie EXIT sur le port dédié et ferme la socket quand l'utilisateur tape exit
                     String messageQuitter = "EXIT";
                     byte[] donneesQuitter = messageQuitter.getBytes();
                     DatagramPacket paquetQuitter = new DatagramPacket(
@@ -69,7 +71,6 @@ public class ClientChatUDP {
                     socket.send(paquetQuitter);
                     break;
                 } else {
-                    // Envoi d'un message sur le port dédié
                     byte[] donneesMessage = saisie.getBytes();
                     DatagramPacket paquetMessage = new DatagramPacket(
                             donneesMessage, donneesMessage.length, adresseServeur, portFinal);
@@ -77,7 +78,6 @@ public class ClientChatUDP {
                 }
             }
 
-            // Fermeture des ressources
             socket.close();
             scanner.close();
 
